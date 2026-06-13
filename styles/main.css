@@ -521,6 +521,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
   overflow: hidden;
 }
 
+.modal-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .modal.hidden, .modal-overlay.hidden {
   display: none;
 }

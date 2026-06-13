@@ -156,8 +156,8 @@ class CanvasRenderer {
    * @param {number} dy - Screen-space Y delta
    */
   pan(dx, dy) {
-    this.panX += dx / this.zoom;
-    this.panY += dy / this.zoom;
+    this.panX -= dx / this.zoom;
+    this.panY -= dy / this.zoom;
     this.render();
   }
 
@@ -201,24 +201,39 @@ class CanvasRenderer {
     const w = this.width;
     const h = this.height;
 
-    // Clear
-    ctx.fillStyle = '#0f0f1a';
-    ctx.fillRect(0, 0, w, h);
-
-    // Grid drawing parameters
     const cellSize = this.zoom;
     if (cellSize < 1) return;
 
-    // Calculate visible grid range
-    const viewLeft = -this.panX;
-    const viewTop = -this.panY;
-    const viewRight = viewLeft + w / this.zoom;
-    const viewBottom = viewTop + h / this.zoom;
+    // Visible cell range (camera model: screenX = (gridX - panX)*zoom + w/2)
+    const halfW = w / (2 * this.zoom);
+    const halfH = h / (2 * this.zoom);
+    const viewLeft = this.panX - halfW;
+    const viewTop = this.panY - halfH;
+    const viewRight = this.panX + halfW;
+    const viewBottom = this.panY + halfH;
 
     const startX = Math.max(0, Math.floor(viewLeft));
     const startY = Math.max(0, Math.floor(viewTop));
     const endX = Math.min(this.grid.width, Math.ceil(viewRight));
     const endY = Math.min(this.grid.height, Math.ceil(viewBottom));
+
+    // Grid boundary in screen space
+    const cellLeft   = (0 - this.panX) * cellSize + w / 2;
+    const cellTop    = (0 - this.panY) * cellSize + h / 2;
+    const cellRight  = (this.grid.width - this.panX) * cellSize + w / 2;
+    const cellBottom = (this.grid.height - this.panY) * cellSize + h / 2;
+
+    // Clear outer area with a slightly distinct shade so the grid boundary is obvious
+    ctx.fillStyle = '#090911';
+    ctx.fillRect(0, 0, w, h);
+
+    // Fill the grid rectangle with the proper grid background color
+    const gx0 = Math.max(0, Math.floor(cellLeft));
+    const gy0 = Math.max(0, Math.floor(cellTop));
+    const gx1 = Math.min(w, Math.ceil(cellRight));
+    const gy1 = Math.min(h, Math.ceil(cellBottom));
+    ctx.fillStyle = '#0f0f1a';
+    ctx.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
 
     // Draw cells
     const cells = this.grid.cells;
@@ -245,10 +260,6 @@ class CanvasRenderer {
 
     // Draw grid lines at sufficient zoom, clipped to the cell area
     if (cellSize >= 6) {
-      const cellLeft   = (0 - this.panX) * cellSize + w / 2;
-      const cellTop    = (0 - this.panY) * cellSize + h / 2;
-      const cellRight  = (this.grid.width - this.panX) * cellSize + w / 2;
-      const cellBottom = (this.grid.height - this.panY) * cellSize + h / 2;
       ctx.save();
       ctx.beginPath();
       ctx.rect(
@@ -257,27 +268,33 @@ class CanvasRenderer {
       );
       ctx.clip();
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
       ctx.lineWidth = 1;
 
+      // Batch all lines into a single path for performance
+      ctx.beginPath();
       for (let x = startX; x <= endX; x++) {
-        const sx = (x - this.panX) * cellSize + w / 2;
-        ctx.beginPath();
-        ctx.moveTo(Math.floor(sx) + 0.5, 0);
-        ctx.lineTo(Math.floor(sx) + 0.5, h);
-        ctx.stroke();
+        const sx = Math.floor((x - this.panX) * cellSize + w / 2) + 0.5;
+        ctx.moveTo(sx, 0);
+        ctx.lineTo(sx, h);
       }
-
       for (let y = startY; y <= endY; y++) {
-        const sy = (y - this.panY) * cellSize + h / 2;
-        ctx.beginPath();
-        ctx.moveTo(0, Math.floor(sy) + 0.5);
-        ctx.lineTo(w, Math.floor(sy) + 0.5);
-        ctx.stroke();
+        const sy = Math.floor((y - this.panY) * cellSize + h / 2) + 0.5;
+        ctx.moveTo(0, sy);
+        ctx.lineTo(w, sy);
       }
+      ctx.stroke();
 
       ctx.restore();
     }
+
+    // Draw a border around the grid so its boundary is always visible
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      Math.floor(cellLeft) + 0.5, Math.floor(cellTop) + 0.5,
+      Math.round(cellRight - cellLeft), Math.round(cellBottom - cellTop)
+    );
   }
 
   /**
